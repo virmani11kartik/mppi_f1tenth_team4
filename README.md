@@ -1,1 +1,1 @@
-# mppi_example
+# MPPI Example Code for ROS2
