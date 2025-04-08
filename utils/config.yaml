@@ -1,5 +1,0 @@
-norm_params:
-- - 4 # 0 steering velocity
-  - -2
-- - 6.0 # 1 acceleration f1tenth car
-  - -3 

@@ -2,11 +2,8 @@ import os, sys
 import jax
 import jax.numpy as jnp
 import numpy as np
-import copy
 from functools import partial
 from numba import njit
-sys.path.append("../")
-
 import utils.jax_utils as jax_utils
 from dynamics_models.dynamics_models_jax import *
 
@@ -28,7 +25,6 @@ class InferEnv():
         self.jrng = jax_utils.oneLineJaxRNG(0) if jrng is None else jrng
         self.state_frenet = jnp.zeros(6)
         self.norm_params = config.norm_params
-        # self.mb_dyna_pre = None
         print('MPPI Model:', self.config.state_predictor)
         
         def RK4_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
@@ -91,8 +87,6 @@ class InferEnv():
         """
         reward function for the state s with respect to the reference trajectory
         """
-        # gamma = 0.8
-        # gamma_vec = jnp.array([gamma ** i for i in range(reference.shape[0] - 1)])
         xy_cost = -jnp.linalg.norm(reference[1:, :2] - state[:, :2], ord=1, axis=1)
         vel_cost = -jnp.linalg.norm(reference[1:, 2] - state[:, 3])
         yaw_cost = -jnp.abs(jnp.sin(reference[1:, 3]) - jnp.sin(state[:, 4])) - \
@@ -258,7 +252,7 @@ def nearest_point(point, trajectory):
         min_dist_segment], min_dist_segment
 
 
-@njit(cache=True)
+# @njit(cache=True)
 def get_reference_trajectory(predicted_speeds, dist_from_segment_start, idx, 
                              waypoints, n_steps, waypoints_distances, DT):
     s_relative = np.zeros((n_steps + 1,))

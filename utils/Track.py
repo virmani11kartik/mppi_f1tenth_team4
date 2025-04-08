@@ -512,8 +512,6 @@ class Track:
         # NOTE: initialized states for forward
         if config.wpt_thind == -1:
             print('Convert to raceline format.')
-            # init_theta = np.arctan2(waypoints[1, config.wpt_yind] - waypoints[0, config.wpt_yind], 
-            #                         waypoints[1, config.wpt_xind] - waypoints[0, config.wpt_xind])
             waypoints = Track.centerline_to_frenet(waypoints, velocity=5.0)
             # np.save('waypoints.npy', waypoints)
             config.wpt_xind = 1

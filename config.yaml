@@ -1,0 +1,36 @@
+a_cov_shift: false
+adaptive_covariance: false
+cartesian_models:
+- dynamic_ST
+- kinematic_ST
+control_dim: 2
+control_sample_std:
+- 0.5
+- 0.5
+exp_name: mppi_tracking
+friction: 0.5
+init_vel: 2.0
+is_sim: false
+map_dir: ./waypoints/
+map_ind: 0
+n_iterations: 1
+n_samples: 512
+n_steps: 10
+norm_params:
+- - 4.0
+  - -2.0
+- - 6.0
+  - -3.0
+random_seed: 527787
+ref_vel: 4.0
+render: 1
+s_frame_max: 62.12059091197948
+sim_time_step: 0.1
+state_predictor: dynamic_ST
+wpt_delim: ;
+wpt_path: levine/levine.csv
+wpt_rowskip: 3
+wpt_thind: 3
+wpt_vind: 5
+wpt_xind: 1
+wpt_yind: 2
