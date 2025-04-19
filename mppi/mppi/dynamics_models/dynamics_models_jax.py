@@ -1,7 +1,7 @@
 import jax.numpy as jnp
-import dynamics_models.tire_models as tireModel
+import mppi.dynamics_models.tire_models as tireModel
 import jax
-from dynamics_models.mb_model_params import params_real, params_f1tenth
+from mppi.dynamics_models.mb_model_params import params_real, params_f1tenth
 params = params_f1tenth
 import numpy as np
 from functools import partial

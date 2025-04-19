@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 from functools import partial
 from numba import njit
-import utils.jax_utils as jax_utils
-from dynamics_models.dynamics_models_jax import *
+import mppi.utils.jax_utils as jax_utils
+from mppi.dynamics_models.dynamics_models_jax import *
 
 CUDANUM = 0
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
