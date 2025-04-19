@@ -2,7 +2,6 @@
 #include <string>
 #include <cmath>
 #include <vector>
-
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -16,15 +15,15 @@
 
 using namespace std;
 
-class MPC : public rclcpp::Node
+class MPPI : public rclcpp::Node
 {
-    // Implement MPC
+    // Implement MPPI
     // This is just a template, you are free to implement your own node!
 
 private:
 
 public:
-    MPC() : Node("mpc_node")
+    MPPI() : Node("MPPI_node")
     {
         // TODO: create ROS subscribers and publishers
     }
@@ -34,12 +33,12 @@ public:
     (void)pose_msg;
     }
 
-    ~MPC() {}
+    ~MPPI() {}
 };
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<MPC>());
+    rclcpp::spin(std::make_shared<MPPI>());
     rclcpp::shutdown();
     return 0;
 }
