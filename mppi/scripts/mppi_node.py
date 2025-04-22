@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import rclpy
 from rclpy.node import Node
-import tf_transformations
+from tf_transformations import euler_from_quaternion
 from geometry_msgs.msg import Point, PoseStamped
 from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
@@ -89,7 +89,7 @@ class MPPI_Node(Node):
         quaternion = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
 
         # Convert quaternion to Euler angles
-        euler = tf_transformations.euler_from_quaternion(quaternion)
+        euler = euler_from_quaternion(quaternion)
 
         # Extract the Z-angle (yaw)
         theta = euler[2]  # Yaw is the third element
@@ -135,7 +135,7 @@ class MPPI_Node(Node):
         drive_msg.header.frame_id = "base_link"
         drive_msg.drive.steering_angle = self.control[0]
         drive_msg.drive.speed = self.control[1]
-        # self.get_logger().info(f"Steering Angle: {drive_msg.drive.steering_angle}, Speed: {drive_msg.drive.speed}")
+        self.get_logger().info(f"Steering Angle: {drive_msg.drive.steering_angle}, Speed: {drive_msg.drive.speed}")
         self.drive_pub.publish(drive_msg)
         
 
