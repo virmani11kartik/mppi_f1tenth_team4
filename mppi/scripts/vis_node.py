@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import numpy as np
 import os, sys
 import rclpy
@@ -5,8 +6,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import MultiArrayDimension, Float32MultiArray
-from ros_np_multiarray import to_multiarray_f32, to_numpy_f32
-from QtMatplotlib import QtPlotter
+from mppi.ros_np_multiarray import to_multiarray_f32, to_numpy_f32
+from mppi.QtMatplotlib import QtPlotter
 
 
 class Visualizer_Node(Node):

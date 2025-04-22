@@ -11,7 +11,6 @@ from nav_msgs.msg import Odometry
 from ackermann_msgs.msg import AckermannDriveStamped
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 from mppi.utils.ros_np_multiarray import to_multiarray_f32, to_numpy_f32
-
 from mppi.infer_env import InferEnv
 from mppi.mppi_tracking import MPPI
 import mppi.utils.utils as utils
@@ -128,6 +127,7 @@ class MPPI_Node(Node):
         if np.isnan(self.control).any() or np.isinf(self.control).any():
             self.control = np.array([0.0, 0.0])
             self.mppi.a_opt = np.zeros_like(self.mppi.a_opt)
+        
 
         # Publish the control command
         drive_msg = AckermannDriveStamped()
