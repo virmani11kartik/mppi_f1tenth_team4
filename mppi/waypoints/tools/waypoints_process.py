@@ -37,15 +37,17 @@ def convert(input_path, output_path):
     ys = np.interp(new_ss, ss, ys)
     # unwrap theta for smooth interpolation then wrap back
     thetas_unwrapped = np.unwrap(thetas)
-    thetas = np.interp(new_ss, ss, thetas_unwrapped)
-    thetas = (thetas + np.pi) % (2 * np.pi) - np.pi
+    thetas_interp = np.interp(new_ss, ss, thetas_unwrapped)
+    # compute curvature kappa = dtheta/ds
+    kappas = np.gradient(thetas_interp, new_ss)
+    thetas = (thetas_interp + np.pi) % (2 * np.pi) - np.pi
     vels = np.interp(new_ss, ss, vels)
     ss = new_ss.tolist()
 
     # build body lines with semicolon-separated values
     body_lines = []
-    for s, x, y, th, v in zip(ss, xs, ys, thetas, vels):
-        line = f"{s:.18e};{x:.18e};{y:.18e};{th:.18e};{0.0:.18e};{v:.18e};{0.0:.18e};{0.0:.18e};{0.0:.18e}"
+    for s, x, y, th, k, v in zip(ss, xs, ys, thetas, kappas, vels):
+        line = f"{s:.18e};{x:.18e};{y:.18e};{th:.18e};{k:.18e};{v:.18e};{0.0:.18e};{0.75:.18e};{0.75:.18e}"
         body_lines.append(line)
 
     # compute MD5 of content
