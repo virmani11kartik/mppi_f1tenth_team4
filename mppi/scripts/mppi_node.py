@@ -19,7 +19,7 @@ import mppi.utils.jax_utils as jax_utils
 from mppi.utils.Track import Track
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
-jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
+#jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
 
 ## This is a demosntration of how to use the MPPI planner with the Roboracer
 ## Zirui Zang 2025/04/07
