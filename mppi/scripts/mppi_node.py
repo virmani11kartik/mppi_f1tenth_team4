@@ -21,9 +21,6 @@ from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
 jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
 
-## This is a demosntration of how to use the MPPI planner with the Roboracer
-## Zirui Zang 2025/04/07
-
 class MPPI_Node(Node):
     def __init__(self):
         super().__init__('lmppi_node')

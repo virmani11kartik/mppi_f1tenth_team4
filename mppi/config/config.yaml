@@ -28,7 +28,7 @@ s_frame_max: 62.12059091197948
 sim_time_step: 0.1
 state_predictor: dynamic_ST
 wpt_delim: ;
-wpt_path: levine/levine.csv
+wpt_path: map_edited_waypoints.csv
 wpt_rowskip: 3
 wpt_thind: 3
 wpt_vind: 5
