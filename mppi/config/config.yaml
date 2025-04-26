@@ -6,7 +6,7 @@ cartesian_models:
 control_dim: 2
 control_sample_std:
 - 1.0
-- 5.0
+- 0.5
 exp_name: mppi_tracking
 friction: 0.8
 init_vel: 2.0
@@ -22,7 +22,7 @@ norm_params:
 - - 6.0
   - -3.0
 random_seed: 527787
-ref_vel: 4.0
+ref_vel: 2.0
 render: 1
 s_frame_max: 62.12059091197948
 sim_time_step: 0.1

@@ -92,7 +92,7 @@ class InferEnv():
         yaw_cost = -jnp.abs(jnp.sin(reference[1:, 3]) - jnp.sin(state[:, 4])) - \
             jnp.abs(jnp.cos(reference[1:, 4]) - jnp.cos(state[:, 4]))
             
-        # return 20*xy_cost + 15*vel_cost + 1*yaw_cost
+        # return 10*xy_cost + 15*vel_cost + 1*yaw_cost
         return xy_cost
     
     
