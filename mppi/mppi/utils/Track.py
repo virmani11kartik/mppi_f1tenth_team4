@@ -581,17 +581,20 @@ class Track:
                                             self.waypoints[:, (1, 2)].copy())
         
         if target_speed is None:
-            # speed = self.waypoints[ind, vind] * speed_factor
-            # speed = np.minimum(self.waypoints[ind, vind] * speed_factor, 20.)
             speed = state[3]
         else:
             speed = target_speed
         
-        # if ind < self.waypoints.shape[0] - self.n_steps:
-        #     speeds = self.waypoints[ind:ind+self.n_steps, vind]
-        # else:
-        speeds = np.ones(horizon) * speed
-        
+        # sample real speeds from waypoints
+        wp_speeds = self.waypoints[:, vind] * speed_factor
+        if ind + horizon <= wp_speeds.shape[0]:
+            speeds = wp_speeds[ind: ind + horizon]
+        else:
+            # pad with constant speed if beyond track end
+            tail = wp_speeds[ind:]
+            pad = np.ones(horizon - tail.shape[0]) * speed
+            speeds = np.concatenate([tail, pad])
+
         reference = get_reference_trajectory(speeds, dist, ind, 
                                             self.waypoints.copy(), int(horizon),
                                             self.waypoints_distances.copy(), DT=DT)

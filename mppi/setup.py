@@ -20,6 +20,7 @@ setup(
     entry_points={
         'console_scripts': [
             'mppi_node = mppi.mppi_node:main',
+            'vis_node = mppi.vis_node:main',
         ],
     },
 )

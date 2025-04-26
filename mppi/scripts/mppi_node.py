@@ -66,6 +66,8 @@ class MPPI_Node(Node):
         self.drive_pub = self.create_publisher(AckermannDriveStamped, "/drive", qos)
         self.reference_pub = self.create_publisher(Float32MultiArray, "/reference_arr", qos)
         self.opt_traj_pub = self.create_publisher(Float32MultiArray, "/opt_traj_arr", qos)
+        # publisher for sample trajectories
+        self.sampled_pub = self.create_publisher(Float32MultiArray, "/sampled_arr", qos)
 
     def pose_callback(self, pose_msg):
         """
@@ -82,7 +84,7 @@ class MPPI_Node(Node):
         # Beta calculated by the arctan of the lateral velocity and the longitudinal velocity
         beta = np.arctan2(twist.linear.y, twist.linear.x)
 
-        # For demonstration, let’s assume we have these quaternion values
+        # For demonstration, let's assume we have these quaternion values
         quaternion = [pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
 
         # Convert quaternion to Euler angles
@@ -118,6 +120,12 @@ class MPPI_Node(Node):
             opt_traj_cpu = numpify(self.mppi.traj_opt)
             arr_msg = to_multiarray_f32(opt_traj_cpu.astype(np.float32))
             self.opt_traj_pub.publish(arr_msg)
+
+        # publish sampled trajectories
+        if self.sampled_pub.get_subscription_count() > 0:
+            sampled_cpu = numpify(self.mppi.states)  # [n_samples, n_steps, state_dim]
+            arr_msg = to_multiarray_f32(sampled_cpu.astype(np.float32))
+            self.sampled_pub.publish(arr_msg)
 
         if twist.linear.x < self.config.init_vel:
             self.control = [0.0, self.config.init_vel * 2]

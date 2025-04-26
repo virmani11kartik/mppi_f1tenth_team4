@@ -133,10 +133,8 @@ class CubicSplineND:
                             cosines_spline, sines_spline, 
                             ks_spline, vxs_spline, axs_spline]
         
-        if not np.all(self.points[-1] == self.points[0]):
-            self.points = np.vstack(
-                (self.points, self.points[0])
-            )  # Ensure the path is closed
+        # override for periodic boundary conditions: set last point to first
+        self.points[-1] = self.points[0]
         self.points_jax = jnp.array(self.points)
         if ss is not None:
             self.s = ss

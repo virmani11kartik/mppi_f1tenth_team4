@@ -5,14 +5,14 @@ cartesian_models:
 - kinematic_ST
 control_dim: 2
 control_sample_std:
-- 0.5
-- 0.5
+- 1.0
+- 5.0
 exp_name: mppi_tracking
 friction: 0.8
 init_vel: 2.0
 is_sim: True
 map_dir: ./waypoints/
-map_ind: 0
+map_ind: 2
 n_iterations: 1
 n_samples: 512
 n_steps: 10
