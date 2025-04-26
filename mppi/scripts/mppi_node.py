@@ -102,8 +102,9 @@ class MPPI_Node(Node):
             twist.angular.z,
             beta,
         ])
-        find_waypoint_vel = max(self.config.ref_vel, twist.linear.x)
-        reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), find_waypoint_vel, self.config.n_steps)
+        
+        # 使用None作为target_speed，让系统使用waypoints上的速度
+        reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), None, self.config.n_steps)
 
         ## MPPI call
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))

@@ -150,16 +150,24 @@ class InferEnv():
                                            self.waypoints[:, (1, 2)].copy())
         
         if target_speed is None:
-            # speed = self.waypoints[ind, vind] * speed_factor
+            speed = self.waypoints[ind, vind] * speed_factor
             # speed = np.minimum(self.waypoints[ind, vind] * speed_factor, 20.)
-            speed = state[3]
+            # speed = state[3]
         else:
             speed = target_speed
         
-        # if ind < self.waypoints.shape[0] - self.n_steps:
-        #     speeds = self.waypoints[ind:ind+self.n_steps, vind]
-        # else:
-        speeds = np.ones(n_steps) * speed
+        if ind < self.waypoints.shape[0] - n_steps:
+            speeds = self.waypoints[ind:ind+n_steps, vind] * speed_factor
+        else:
+            # 处理环形轨迹情况，可能需要从头开始取部分路点
+            remaining = n_steps - (self.waypoints.shape[0] - ind)
+            if remaining > 0:
+                speeds = np.concatenate([
+                    self.waypoints[ind:, vind],
+                    self.waypoints[:remaining, vind]
+                ]) * speed_factor
+            else:
+                speeds = self.waypoints[ind:ind+n_steps, vind] * speed_factor
         
         reference = get_reference_trajectory(speeds, dist, ind, 
                                             self.waypoints.copy(), int(n_steps),
