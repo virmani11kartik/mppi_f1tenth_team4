@@ -12,7 +12,7 @@ friction: 0.8
 init_vel: 2.0
 is_sim: True
 map_dir: ./waypoints/
-map_ind: 2
+map_ind: 3
 n_iterations: 1
 n_samples: 512
 n_steps: 10
