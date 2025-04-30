@@ -99,18 +99,30 @@ class MPPI():
                 states, reference_traj
             ) # [n_samples, n_steps]          
         
-        R = jax.vmap(self.returns)(reward) # [n_samples, n_steps], pylint: disable=invalid-name
-        w = jax.vmap(self.weights, 1, 1)(R)  # [n_samples, n_steps]
-        da_opt = jax.vmap(jnp.average, (1, None, 1))(da, 0, w)  # [n_steps, dim_a]
+        # 修改：计算轨迹级别的累积回报
+        R_traj = jax.vmap(lambda r: jnp.sum(r))(reward)  # [n_samples]，每条轨迹的总回报
+        
+        # 修改：计算轨迹级别的权重
+        w_traj = self.weights(R_traj)  # [n_samples]
+        
+        # 修改：使用轨迹级别的权重对每个时间步的控制增量进行加权
+        da_opt = jnp.zeros_like(a_opt)  # [n_steps, a_shape]
+        for i in range(self.n_steps):
+            # 对当前时间步的所有样本控制增量使用轨迹级别的权重进行加权平均
+            da_opt = da_opt.at[i].set(jnp.sum(da[:, i] * jnp.expand_dims(w_traj, -1), axis=0))
+        
         a_opt = jnp.clip(a_opt + da_opt, -1.0, 1.0)  # [n_steps, dim_a]
+        
         if self.adaptive_covariance:
-            a_cov = jax.vmap(jax.vmap(jnp.outer))(
-                da, da
-            )  # [n_samples, n_steps, a_shape, a_shape]
-            a_cov = jax.vmap(jnp.average, (1, None, 1))(
-                a_cov, 0, w
-            )  # a_cov: [n_steps, a_shape, a_shape]
-            a_cov = a_cov + jnp.eye(self.a_shape)*0.00001 # prevent loss of rank when one sample is heavily weighted
+            # 使用轨迹级别的权重更新协方差矩阵
+            a_cov = jnp.zeros((self.n_steps, self.a_shape, self.a_shape))
+            for i in range(self.n_steps):
+                # 对每个时间步单独计算加权协方差
+                for j in range(self.n_samples):
+                    outer_prod = jnp.outer(da[j, i], da[j, i])
+                    a_cov = a_cov.at[i].add(outer_prod * w_traj[j])
+            # 防止秩降
+            a_cov = a_cov + jnp.eye(self.a_shape)*0.00001
             
         if self.config.render:
             traj_opt = self.rollout(a_opt, env_state, rng_da_split2)
