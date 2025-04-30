@@ -28,7 +28,7 @@ class InferEnv():
         print('MPPI Model:', self.config.state_predictor)
         
         # 初始化代价函数参数
-        self.obstacle_cost_weight = 1.0  # 避障代价权重
+        self.obstacle_cost_weight = 0.1  # 避障代价权重
         
         # 初始化costmap相关属性
         # 默认空 costmap，避免初始化阶段为 None 导致 JIT 报错
