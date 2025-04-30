@@ -27,6 +27,21 @@ class InferEnv():
         self.norm_params = config.norm_params
         print('MPPI Model:', self.config.state_predictor)
         
+        # 初始化代价函数参数
+        self.obstacle_cost_weight = 1.0  # 避障代价权重
+        
+        # 初始化costmap相关属性
+        # 默认空 costmap，避免初始化阶段为 None 导致 JIT 报错
+        self.default_costmap = jnp.zeros((1, 1), dtype=jnp.float32)
+        self.costmap = None
+        self.costmap_origin = (0.0, 0.0)
+        self.costmap_resolution = 0.1
+        self.costmap_jax = self.default_costmap
+        
+        # 添加用于调试的代价跟踪
+        self.latest_tracking_cost = 0.0
+        self.latest_obstacle_cost = 0.0
+        
         def RK4_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
             # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt # Euler integration
             # RK4 integration
@@ -61,6 +76,24 @@ class InferEnv():
                 return (x1, 0, x1-x)
             self.update_fn = update_fn
             
+    def update_costmap(self, costmap, origin, resolution):
+        """更新栅格地图数据
+        
+        参数
+        -----
+        costmap: np.ndarray
+            栅格地图数据，0=空闲，100=占用，10=未知
+        origin: tuple
+            栅格图左下角在车体坐标系中的位置 (x, y)
+        resolution: float
+            栅格分辨率 (m/cell)
+        """
+        self.costmap = costmap
+        self.costmap_origin = origin
+        self.costmap_resolution = resolution
+        # 转换为JAX数组以便在reward_fn_xy中使用
+        self.costmap_jax = jnp.array(costmap)
+            
     @partial(jax.jit, static_argnums=(0,))
     def step(self, x, u, rng_key=None, dyna_norm_param=None):
         return self.update_fn(x, u * self.norm_params[0, :2]/2)
@@ -82,18 +115,115 @@ class InferEnv():
         self.diff = self.waypoints[1:, 1:3] - self.waypoints[:-1, 1:3]
         self.waypoints_distances = np.linalg.norm(self.waypoints[1:, (1, 2)] - self.waypoints[:-1, (1, 2)], axis=1)
     
+    def calc_obstacle_cost(self, state):
+        """计算轨迹点的避障代价
+        
+        参数
+        -----
+        state: jnp.ndarray
+            预测轨迹点的状态，shape = [n_steps, state_dim]
+            
+        返回
+        -----
+        obstacle_cost: jnp.ndarray
+            每个轨迹点的避障代价，shape = [n_steps]
+        """
+        if self.costmap is None:
+            # 如果没有costmap，返回零代价
+            return jnp.zeros(state.shape[0])
+        
+        # 提取轨迹点的x,y坐标和车辆朝向
+        positions = state[:, :2]  # [n_steps, 2]
+        theta = state[0, 4]  # 车辆朝向角度
+        
+        # 获取当前车辆位置作为坐标转换的参考点
+        vehicle_x, vehicle_y = state[0, 0], state[0, 1]
+        
+        # 将轨迹点从全局坐标系转换到车体坐标系
+        # 1. 平移变换：将车辆当前位置作为原点
+        positions_translated = positions - jnp.array([vehicle_x, vehicle_y])
+        
+        # 2. 旋转变换：根据车辆朝向角度旋转坐标系
+        cos_theta, sin_theta = jnp.cos(theta), jnp.sin(theta)
+        rotation_matrix = jnp.array([
+            [cos_theta, sin_theta],
+            [-sin_theta, cos_theta]
+        ])
+        
+        # 应用旋转变换 (x', y') = R * (x, y)
+        positions_car_frame = jnp.zeros_like(positions_translated)
+        for i in range(positions_translated.shape[0]):
+            positions_car_frame = positions_car_frame.at[i].set(
+                jnp.matmul(rotation_matrix, positions_translated[i])
+            )
+        
+        # 现在positions_car_frame中的坐标是相对于车体坐标系的
+        # 计算对应的栅格坐标
+        grid_x = jnp.floor((positions_car_frame[:, 0] - self.costmap_origin[0]) / 
+                          self.costmap_resolution).astype(jnp.int32)
+        grid_y = jnp.floor((positions_car_frame[:, 1] - self.costmap_origin[1]) / 
+                          self.costmap_resolution).astype(jnp.int32)
+        
+        # 检查坐标是否在栅格范围内
+        in_bounds = (grid_x >= 0) & (grid_x < self.costmap.shape[1]) & (grid_y >= 0) & (grid_y < self.costmap.shape[0])
+        
+        # 获取栅格值
+        def get_cost(x, y, in_bound):
+            # 如果在范围外，设为10
+            return jnp.where(in_bound, 
+                           self.costmap_jax[y, x], 
+                           10.0)
+        
+        # 向量化应用
+        grid_costs = jnp.array([get_cost(x, y, in_bound) 
+                             for x, y, in_bound in zip(grid_x, grid_y, in_bounds)])
+        
+        return grid_costs
+    
+    # 使用 JIT，并显式将 costmap 相关信息作为参数传入，避免被静态捕获
     @partial(jax.jit, static_argnums=(0,))
-    def reward_fn_xy(self, state, reference):
+    def reward_fn_xy(self, state, reference, costmap, origin_x, origin_y, resolution):
         """
         reward function for the state s with respect to the reference trajectory
+        
+        现在包含轨迹追踪代价和避障代价
         """
+        # 计算轨迹追踪代价
         xy_cost = -jnp.linalg.norm(reference[1:, :2] - state[:, :2], ord=1, axis=1)
+        
+        # 其他原有代价项
         vel_cost = -jnp.linalg.norm(reference[1:, 2] - state[:, 3])
         yaw_cost = -jnp.abs(jnp.sin(reference[1:, 3]) - jnp.sin(state[:, 4])) - \
             jnp.abs(jnp.cos(reference[1:, 4]) - jnp.cos(state[:, 4]))
             
-        # return 10*xy_cost + 15*vel_cost + 1*yaw_cost
-        return xy_cost
+        # 轨迹追踪总代价
+        tracking_cost = xy_cost
+        
+        # ---------- 避障代价（全部用 JAX 原生向量化实现） ----------
+        # 当前车体姿态
+        theta = state[0, 4]
+        cos_t, sin_t = jnp.cos(theta), jnp.sin(theta)
+
+        # 平移到车体原点后再旋转到车体坐标系
+        trans = state[:, :2] - state[0, :2]  # [n_steps, 2]
+        rot_mat = jnp.array([[cos_t, sin_t], [-sin_t, cos_t]])  # 2×2
+        car_frame = jnp.dot(trans, rot_mat.T)  # [n_steps, 2]
+
+        # 栅格索引
+        gx = jnp.floor((car_frame[:, 0] - origin_x) / resolution).astype(jnp.int32)
+        gy = jnp.floor((car_frame[:, 1] - origin_y) / resolution).astype(jnp.int32)
+
+        h, w = costmap.shape
+        in_bounds = (gx >= 0) & (gx < w) & (gy >= 0) & (gy < h)
+
+        flat = costmap.reshape(-1)
+        idx = gy * w + gx  # [n_steps]
+        cell_cost = jnp.where(in_bounds, jnp.take(flat, idx), 10.0)
+
+        obstacle_cost = -cell_cost * self.obstacle_cost_weight
+
+        # 返回总代价 = 轨迹追踪 + 避障
+        return tracking_cost + obstacle_cost
     
     
     def calc_ref_trajectory_kinematic(self, state, cx, cy, cyaw, sp):

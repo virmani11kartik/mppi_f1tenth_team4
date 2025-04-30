@@ -14,7 +14,7 @@ is_sim: True
 map_dir: ./waypoints/
 map_ind: 3
 n_iterations: 1
-n_samples: 512
+n_samples: 64
 n_steps: 10
 norm_params:
 - - 4.0
@@ -28,7 +28,7 @@ s_frame_max: 62.12059091197948
 sim_time_step: 0.1
 state_predictor: dynamic_ST
 wpt_delim: ;
-wpt_path: map_edited_waypoints.csv
+wpt_path: map1_edited_waypoints.csv
 wpt_rowskip: 3
 wpt_thind: 3
 wpt_vind: 5
