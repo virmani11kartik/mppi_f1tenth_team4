@@ -26,6 +26,13 @@ class InferEnv():
         self.state_frenet = jnp.zeros(6)
         self.norm_params = config.norm_params
         print('MPPI Model:', self.config.state_predictor)
+
+        # Preallocate a JAX array for LiDAR points (world-frame, shape [N,2])
+        # Preallocate a non-empty sentinel: one point at infinity
+        # so jnp.min never fails even before first real scan arrives.
+        self.scan_points = jnp.array([[jnp.inf, jnp.inf]])  # shape [1,2]
+
+    
         
         def RK4_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
             # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt # Euler integration
@@ -60,6 +67,32 @@ class InferEnv():
                 x1 = x.at[:5].set(x_k)
                 return (x1, 0, x1-x)
             self.update_fn = update_fn
+
+    def set_scan(self, scan_msg, robot_state):
+        """
+        scan_msg: LaserScan
+        robot_state: [x, y, steering, v, theta] at the moment of the scan
+        """
+        # 1) build local points in vehicle frame
+        ranges = np.array(scan_msg.ranges)
+        angles = np.linspace(scan_msg.angle_min,
+                             scan_msg.angle_max,
+                             ranges.shape[0])
+        xs = ranges * np.cos(angles)   # local x
+        ys = ranges * np.sin(angles)   # local y
+
+        # 2) compute world transform from robot_state
+        x0, y0, _, _, theta = robot_state
+        c, s = np.cos(theta), np.sin(theta)
+
+        # rotate & translate all points
+        world_xs = c * xs - s * ys + x0
+        world_ys = s * xs + c * ys + y0
+
+        pts = np.stack([world_xs, world_ys], axis=1)  # shape (N,2)
+        self.scan_points = jnp.array(pts)
+
+    
             
     @partial(jax.jit, static_argnums=(0,))
     def step(self, x, u, rng_key=None, dyna_norm_param=None):
@@ -93,7 +126,27 @@ class InferEnv():
             jnp.abs(jnp.cos(reference[1:, 4]) - jnp.cos(state[:, 4]))
             
         # return 10*xy_cost + 15*vel_cost + 1*yaw_cost
-        return xy_cost
+        # 2) obstacle cost per step via JAX vmap
+        gamma    = self.config.svg['gamma']          # TODO: tune
+        delta    = self.config.svg['delta']          # TODO: tune
+        r_danger = self.config.svg['danger_radius']  # TODO: tune
+
+        # cost for a single (x,y)
+        def cost_one(xy):
+            # always safe: self.scan_points is at least [[inf,inf]] or real points
+            dists = jnp.linalg.norm(self.scan_points - xy, axis=1)  # [N>=1]
+            d_min = jnp.min(dists)                                  # safe
+            return jnp.where(
+                d_min < r_danger,
+                gamma * jnp.exp(-d_min / delta),
+                0.0
+            )
+
+        # vectorize over the n_steps
+        obs_costs = jax.vmap(cost_one)(state[:, :2])  # [n_steps]
+
+        # 3) combine
+        return xy_cost + vel_cost + yaw_cost - obs_costs
     
     
     def calc_ref_trajectory_kinematic(self, state, cx, cy, cyaw, sp):

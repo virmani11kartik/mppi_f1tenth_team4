@@ -28,9 +28,19 @@ s_frame_max: 62.12059091197948
 sim_time_step: 0.1
 state_predictor: dynamic_ST
 wpt_delim: ;
-wpt_path: map_edited_waypoints.csv
+wpt_path: map1_edited_waypoints.csv
 wpt_rowskip: 3
 wpt_thind: 3
 wpt_vind: 5
 wpt_xind: 1
 wpt_yind: 2
+
+
+# SVG‐MPPI & obstacle‐avoidance params
+svg:
+  L: 5                   # SVGD iterations          # TODO: tune
+  epsilon: 0.1           # SVGD step‐size          # TODO: tune
+  sigma_guide: 0.02      # guide noise std         # TODO: tune
+  gamma: 1000.0             # obstacle max penalty    # TODO: tune
+  delta: 0.1             # obstacle falloff (m)     # TODO: tune
+  danger_radius: 1.0     # only penalize within m   # TODO: tune
