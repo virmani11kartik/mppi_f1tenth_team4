@@ -3,6 +3,7 @@ import time, os, sys
 import numpy as np
 import jax
 import jax.numpy as jnp
+
 import rclpy
 from rclpy.node import Node
 import tf_transformations
@@ -19,7 +20,7 @@ import mppi.utils.jax_utils as jax_utils
 from mppi.utils.Track import Track
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
-jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
+# jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
 
 class MPPI_Node(Node):
     def __init__(self):
@@ -48,8 +49,10 @@ class MPPI_Node(Node):
         state_c_0 = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         self.control = np.asarray([0.0, 0.0])
         reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), self.config.ref_vel, self.config.n_steps)
+        
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
         self.get_logger().info('MPPI initialized')
+        self.hz = []
         
         
         qos = rclpy.qos.QoSProfile(history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
@@ -68,13 +71,14 @@ class MPPI_Node(Node):
 
     def pose_callback(self, pose_msg):
         """
-        Callback function for subscribing to particle filter's inferred pose.
+        Callback function for subscribing to particle filter's  inferred pose.
         This funcion saves the current pose of the car and obtain the goal
         waypoint from the pure pursuit module.
 
         Args: 
             pose_msg (PoseStamped): incoming message from subscribed topic
         """
+        t1 = time.time()
         pose = pose_msg.pose.pose
         twist = pose_msg.twist.twist
 
@@ -100,7 +104,8 @@ class MPPI_Node(Node):
             beta,
         ])
         find_waypoint_vel = max(self.config.ref_vel, twist.linear.x)
-        reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), find_waypoint_vel, self.config.n_steps)
+        
+        reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0, find_waypoint_vel, self.config.n_steps)
 
         ## MPPI call
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
@@ -124,7 +129,6 @@ class MPPI_Node(Node):
         if np.isnan(self.control).any() or np.isinf(self.control).any():
             self.control = np.array([0.0, 0.0])
             self.mppi.a_opt = np.zeros_like(self.mppi.a_opt)
-        
 
         # Publish the control command
         drive_msg = AckermannDriveStamped()
@@ -134,11 +138,15 @@ class MPPI_Node(Node):
         drive_msg.drive.speed = self.control[1]
         # self.get_logger().info(f"Steering Angle: {drive_msg.drive.steering_angle}, Speed: {drive_msg.drive.speed}")
         self.drive_pub.publish(drive_msg)
+        self.hz.append(1/(time.time() - t1))
+        if len(self.hz) == 100:
+            self.hz = np.mean(self.hz)
+            print(f"MPPI Hz: {self.hz:.2f}")
+            self.hz = []
         
 
 def main(args=None):
     rclpy.init(args=args)
-    print("MPPI node initialized")
     mppi_node = MPPI_Node()
     rclpy.spin(mppi_node)
 
@@ -147,4 +155,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
