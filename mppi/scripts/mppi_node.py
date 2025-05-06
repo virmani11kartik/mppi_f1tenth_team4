@@ -17,7 +17,7 @@ from mppi.utils.laser_to_points import scan_to_points
 from mppi.utils.laser_to_costmap import scan_to_grid, costmap_to_marker
 
 from mppi.infer_env import InferEnv
-from mppi.mppi_tracking import MPPI
+from mppi.svgmppi_tracking import SVGMPPI
 import mppi.utils.utils as utils
 from mppi.utils.jax_utils import numpify
 import mppi.utils.jax_utils as jax_utils
@@ -47,7 +47,7 @@ class MPPI_Node(Node):
         track, self.config = Track.load_map(self.config.map_dir, map_info, self.config.map_ind, self.config)
         # track.waypoints[:, 3] += 0.5 * np.pi
         self.infer_env = InferEnv(track, self.config, DT=self.config.sim_time_step)
-        self.mppi = MPPI(self.config, self.infer_env, jrng)
+        self.mppi = SVGMPPI(self.config, self.infer_env, jrng)
 
         # Do a dummy call on the MPPI to initialize the variables
         state_c_0 = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])

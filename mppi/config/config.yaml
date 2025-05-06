@@ -34,3 +34,12 @@ wpt_thind: 3
 wpt_vind: 5
 wpt_xind: 1
 wpt_yind: 2
+# Parameters specific to SVG-MPPI
+# Number of guide samples (particles) optimized via SVGD before each control update.
+guide_sample_num: 1
+# Number of SVGD iterations per control update.
+num_svgd_iteration: 10
+# Step size for the SVGD Euler update.
+svgd_step_size: 0.1
+# Whether to use the best guide particle as nominal sequence for MPPI.
+is_use_nominal_solution: true
