@@ -4,3 +4,4 @@
 2|race/map_edited_waypoints.csv|;|3|1|2|3|5
 3|race/map1_edited_waypoints.csv|;|3|1|2|3|5
 4|race/map2_edited_waypoints.csv|;|3|1|2|3|5
+5|race/race1_waypoints.csv|;|3|1|2|3|5

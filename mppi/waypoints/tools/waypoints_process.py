@@ -66,9 +66,9 @@ def convert(input_path, output_path):
 def main():
     script_dir = os.path.dirname(__file__)
     default_input = os.path.normpath(os.path.join(
-        script_dir, '..','..','..','..','slam-and-pure-pursuit-team4','pure_pursuit','tools','waypoints','map1_edited_waypoints.csv'))
+        script_dir, '..','..','..','..','slam-and-pure-pursuit-team4','pure_pursuit','tools','waypoints','race1_waypoints.csv'))
     default_output = os.path.normpath(os.path.join(
-        script_dir, '..','race','map1_edited_waypoints.csv'))
+        script_dir, '..','race','race1_waypoints.csv'))
     parser = argparse.ArgumentParser(description='Convert map3_levine_waypoints.csv to levine.csv format')
     parser.add_argument('-i', '--input', default=default_input, help='input CSV path (comma-separated)')
     parser.add_argument('-o', '--output', default=default_output, help='output CSV path (semicolon-separated)')

@@ -12,7 +12,7 @@ friction: 0.8
 init_vel: 2.0
 is_sim: True
 map_dir: ./waypoints/
-map_ind: 3
+map_ind: 5
 n_iterations: 1
 n_samples: 64
 n_steps: 10
@@ -28,7 +28,7 @@ s_frame_max: 62.12059091197948
 sim_time_step: 0.1
 state_predictor: dynamic_ST
 wpt_delim: ;
-wpt_path: map1_edited_waypoints.csv
+wpt_path: race1_waypoints.csv
 wpt_rowskip: 3
 wpt_thind: 3
 wpt_vind: 5
