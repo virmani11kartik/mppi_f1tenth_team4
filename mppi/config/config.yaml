@@ -6,7 +6,7 @@ cartesian_models:
 control_dim: 2
 control_sample_std:
 - 1.0
-- 0.5
+- 5.0
 exp_name: mppi_tracking
 friction: 0.8
 init_vel: 2.0
@@ -14,7 +14,7 @@ is_sim: True
 map_dir: ./waypoints/
 map_ind: 5
 n_iterations: 1
-n_samples: 64
+n_samples: 256
 n_steps: 10
 norm_params:
 - - 4.0

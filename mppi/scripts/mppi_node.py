@@ -54,6 +54,18 @@ class MPPI_Node(Node):
         self.control = np.asarray([0.0, 0.0])
         reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), self.config.ref_vel, self.config.n_steps)
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
+        
+        # 设置初始加速度为5m/s²
+        # 控制信号通常在[-1,1]范围内，需要根据归一化参数进行转换
+        # 计算对应5m/s²加速度的控制值
+        accel_control_value = 5.0 / (self.config.norm_params[0, 1]/2 * self.config.sim_time_step)
+        accel_control_value = np.clip(accel_control_value, -1.0, 1.0)  # 限制在合法范围内
+        
+        # 将所有时间步的速度控制值设置为计算出的加速度值
+        for i in range(self.mppi.n_steps):
+            self.mppi.a_opt = self.mppi.a_opt.at[i, 1].set(accel_control_value)
+            
+        self.get_logger().info(f'已设置初始加速度控制为{accel_control_value}，对应加速度约为5m/s²')
         self.get_logger().info('MPPI initialized')
         
         # 打印MPPI对象的所有属性
@@ -230,6 +242,29 @@ class MPPI_Node(Node):
             # 计算并打印代价
             tracking_cost = np.mean(-np.linalg.norm(reference_traj[1:, :2] - traj_opt[:, :2], ord=1, axis=1))
             
+            # 打印最优轨迹的速度序列
+            optimal_velocities = traj_opt[:, 3]  # 状态向量中索引3对应速度
+            optimal_theta = traj_opt[:, 4]  # 状态向量中索引4对应方向角
+            
+            # 打印参考轨迹的速度序列
+            reference_velocities = numpify(reference_traj[:, 2])  # 参考轨迹中索引2对应速度
+            reference_theta = numpify(reference_traj[:, 3])  # 参考轨迹中索引3对应方向角
+            
+            # 记录速度序列对比
+            self.get_logger().info(f"参考轨迹速度序列: {reference_velocities}")
+            self.get_logger().info(f"最优轨迹速度序列: {optimal_velocities}")
+            
+            # 记录方向角序列对比
+            self.get_logger().info(f"参考轨迹方向角序列: {reference_theta}")
+            self.get_logger().info(f"最优轨迹方向角序列: {optimal_theta}")
+            
+            # 计算并记录速度差异
+            velocity_diff = optimal_velocities - reference_velocities[1:]  # 参考轨迹比最优轨迹多一个点
+            avg_velocity_diff = np.mean(velocity_diff)
+            max_velocity_diff = np.max(velocity_diff)
+            min_velocity_diff = np.min(velocity_diff)
+            self.get_logger().info(f"速度差异统计 - 平均差: {avg_velocity_diff:.4f}, 最大差: {max_velocity_diff:.4f}, 最小差: {min_velocity_diff:.4f}")
+            
             # 如果有costmap，计算障碍代价
             if self.infer_env.costmap is not None:
                 # 计算栅格坐标
@@ -324,6 +359,8 @@ class MPPI_Node(Node):
         drive_msg.header.frame_id = "base_link"
         drive_msg.drive.steering_angle = self.control[0]
         drive_msg.drive.speed = self.control[1]
+        # 记录发布的控制指令
+        self.get_logger().info(f"发布控制: 转向角={drive_msg.drive.steering_angle:.4f}, 速度={drive_msg.drive.speed:.4f}")
         # self.get_logger().info(f"Steering Angle: {drive_msg.drive.steering_angle}, Speed: {drive_msg.drive.speed}")
         self.drive_pub.publish(drive_msg)
         
