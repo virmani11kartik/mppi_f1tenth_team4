@@ -10,7 +10,7 @@ control_sample_std:
 exp_name: mppi_tracking
 friction: 0.8
 init_vel: 2.0
-is_sim: True
+is_sim: False
 map_dir: ./waypoints/
 map_ind: 3
 n_iterations: 1
@@ -21,6 +21,8 @@ norm_params:
   - -2.0
 - - 6.0
   - -3.0
+- - 8.0
+  - -4.0
 random_seed: 527787
 ref_vel: 4.0
 render: 1

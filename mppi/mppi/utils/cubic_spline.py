@@ -8,14 +8,14 @@ import time
 import numpy as np
 import scipy.optimize as so
 from scipy import interpolate
-from typing import Union, Optional
+from typing import Union, Optional, Tuple
 from functools import partial
 import jax.numpy as jnp
 import jax
 
-from numba import njit
-@njit(fastmath=False, cache=True)
-def get_dists_to_point_on_trajectory(point: np.ndarray, trajectory: np.ndarray) -> tuple:
+# from numba import njit
+# @njit(fastmath=False, cache=True)
+def get_dists_to_point_on_trajectory(point: np.ndarray, trajectory: np.ndarray) -> Tuple:
     """
     Return the nearest point along the given piecewise linear trajectory.
 
@@ -69,7 +69,7 @@ def get_dists_to_point_on_trajectory(point: np.ndarray, trajectory: np.ndarray) 
     )
 
 @jax.jit
-def get_dists_to_point_on_trajectory_jax(point, trajectory) -> tuple:
+def get_dists_to_point_on_trajectory_jax(point, trajectory) -> Tuple:
     diffs = trajectory[1:, :] - trajectory[:-1, :]
     l2s = diffs[:, 0] ** 2 + diffs[:, 1] ** 2
     dots = jnp.sum((point - trajectory[:-1,:]) * diffs[:,:], axis=1)
@@ -350,7 +350,7 @@ class CubicSplineND:
         # yaw = (jnp.arctan2(sin, cos) + 2 * jnp.pi) % (2 * jnp.pi) # Get yaw from cos,sin and convert to [0, 2pi]
         return yaw
         
-    def calc_arclength(self, x: float, y: float, s_guess, horizon=30, s_inds=None) -> tuple[float, float]:
+    def calc_arclength(self, x: float, y: float, s_guess, horizon=30, s_inds=None) -> Tuple[float, float]:
         """
         Fast calculation of arclength for a given point (x, y) on the trajectory.
         Less accuarate and less smooth than calc_arclength but much faster.
@@ -401,7 +401,7 @@ class CubicSplineND:
 
     def calc_arclength_slow(
         self, x: float, y: float, s_guess: float = 0.0
-    ) -> tuple[float, float]:
+    ) -> Tuple[float, float]:
         """
         Calculate arclength for a given point (x, y) on the trajectory.
 

@@ -24,7 +24,7 @@ import mppi.utils.jax_utils as jax_utils
 from mppi.utils.Track import Track
 from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
-jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
+# jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
 
 class MPPI_Node(Node):
     def __init__(self):
@@ -55,6 +55,7 @@ class MPPI_Node(Node):
         reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), self.config.ref_vel, self.config.n_steps)
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
         self.get_logger().info('MPPI initialized')
+        self.hz = []
         
         # 打印MPPI对象的所有属性
         self.get_logger().info("MPPI对象的属性:")
@@ -107,6 +108,7 @@ class MPPI_Node(Node):
         Args: 
             pose_msg (PoseStamped): incoming message from subscribed topic
         """
+        t1 = time.time()
         pose = pose_msg.pose.pose
         twist = pose_msg.twist.twist
 
@@ -131,9 +133,12 @@ class MPPI_Node(Node):
             twist.angular.z,
             beta,
         ])
+
+        find_waypoint_vel = max(self.config.ref_vel, twist.linear.x)
         
         # 使用None作为target_speed，让系统使用waypoints上的速度
-        reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), None, self.config.n_steps)
+        # reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), None, self.config.n_steps)
+        reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0, find_waypoint_vel, self.config.n_steps)
 
         ## MPPI call
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
@@ -326,6 +331,11 @@ class MPPI_Node(Node):
         drive_msg.drive.speed = self.control[1]
         # self.get_logger().info(f"Steering Angle: {drive_msg.drive.steering_angle}, Speed: {drive_msg.drive.speed}")
         self.drive_pub.publish(drive_msg)
+        self.hz.append(1/(time.time() - t1))
+        if len(self.hz) == 100:
+            self.hz = np.mean(self.hz)
+            print(f"MPPI Hz: {self.hz:.2f}")
+            self.hz = []
         
     def scan_callback(self, scan_msg):
         # 只在性能监控模式下显示详细日志
