@@ -71,7 +71,7 @@ class MPPI():
         return a_opt, a_cov
     
     
-    @partial(jax.jit, static_argnums=(0))
+    # 注意：取消 JIT 装饰以便每次调用时都可感知最新的环境信息（例如动态更新的 costmap）
     def iteration_step(self, a_opt, a_cov, rng_da, env_state, reference_traj):
         rng_da, rng_da_split1, rng_da_split2 = jax.random.split(rng_da, 3)
         da = jax.random.truncated_normal(
@@ -87,8 +87,12 @@ class MPPI():
         )
         
         if self.config.state_predictor in self.config.cartesian_models:
-            reward = jax.vmap(self.env.reward_fn_xy, in_axes=(0, None))(
-                states, reference_traj
+            reward = jax.vmap(self.env.reward_fn_xy, in_axes=(0, None, None, None, None, None))( # type: ignore
+                states, reference_traj,
+                self.env.costmap_jax,
+                self.env.costmap_origin[0],
+                self.env.costmap_origin[1],
+                self.env.costmap_resolution,
             )
         else:
             reward = jax.vmap(self.env.reward_fn_sey, in_axes=(0, None))(

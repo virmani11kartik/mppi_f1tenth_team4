@@ -42,6 +42,8 @@ class Visualizer_Node(Node):
         self.obstacle_pub = self.create_publisher(MarkerArray, "/vis/obstacle", 1)
         self.track_pub = self.create_publisher(MarkerArray, '/vis/track', 1)
         self.sampled_vis_pub = self.create_publisher(MarkerArray, '/vis/sampled', 1)
+        self.heavy_weights_pub = self.create_publisher(MarkerArray, '/vis/heavy_weights', 1)
+        self.weight_labels_pub = self.create_publisher(MarkerArray, '/vis/weight_labels', 1)
         self.speed_pub = self.create_publisher(MarkerArray, '/vis/ref_speed', 1)
         
         self.frenet_pose_sub = self.create_subscription(Float32MultiArray, "/frenet_pose", self.frenet_pose_callback, 1)
@@ -50,6 +52,10 @@ class Visualizer_Node(Node):
         self.obstacle_sub = self.create_subscription(Float32MultiArray, "/obstacle_arr_xy", self.obstacle_callback, 1)
         self.reward_sub = self.create_subscription(Float32MultiArray, "/reward_arr", self.reward_callback, 1)
         self.sampled_sub = self.create_subscription(Float32MultiArray, '/sampled_arr', self.sampled_callback, 1)
+        self.weights_sub = self.create_subscription(Float32MultiArray, '/traj_weights', self.weights_callback, 1)
+        
+        self.sampled_trajectories = None
+        self.trajectory_weights = None
 
         # publish full track on startup
         config = ConfigYAML()
@@ -74,6 +80,88 @@ class Visualizer_Node(Node):
             pt = Point(); pt.x = float(x); pt.y = float(y); pt.z = 0.0
             line_marker.points.append(pt)
         self.track_pub.publish(MarkerArray(markers=[line_marker]))
+
+    def weights_callback(self, arr_msg):
+        self.trajectory_weights = to_numpy_f32(arr_msg)
+        if self.sampled_trajectories is not None and self.trajectory_weights is not None:
+            self.visualize_heavy_weight_trajectories()
+
+    def visualize_heavy_weight_trajectories(self):
+        if self.heavy_weights_pub.get_subscription_count() == 0:
+            return
+            
+        if len(self.trajectory_weights) != self.sampled_trajectories.shape[0]:
+            self.get_logger().warn(f"权重数量({len(self.trajectory_weights)})与轨迹数量({self.sampled_trajectories.shape[0]})不匹配")
+            return
+        
+        heavy_indices = np.where(self.trajectory_weights > 0.1)[0].astype(int)
+        
+        markers = MarkerArray()
+        weight_labels = MarkerArray()
+        
+        for i, idx in enumerate(heavy_indices):
+            m = Marker()
+            m.header.frame_id = 'map'
+            m.header.stamp = self.get_clock().now().to_msg()
+            m.ns = f'heavy_traj_{int(idx)}'
+            m.id = int(idx)
+            m.type = Marker.LINE_STRIP
+            m.action = Marker.ADD
+            m.scale.x = 0.03
+            m.color.a = 1.0
+            m.color.r = 0.0
+            m.color.g = 0.0
+            m.color.b = 1.0
+            
+            traj = self.sampled_trajectories[idx]
+            for j in range(traj.shape[0]):
+                p = Point()
+                p.x = float(traj[j, 0])
+                p.y = float(traj[j, 1])
+                p.z = 0.0
+                m.points.append(p)
+            
+            markers.markers.append(m)
+            
+            txt = Marker()
+            txt.header.frame_id = 'map'
+            txt.header.stamp = self.get_clock().now().to_msg()
+            txt.ns = f'weight_label_{int(idx)}'
+            txt.id = int(idx)
+            txt.type = Marker.TEXT_VIEW_FACING
+            txt.action = Marker.ADD
+            txt.pose.position.x = float(traj[-1, 0])
+            txt.pose.position.y = float(traj[-1, 1])
+            txt.pose.position.z = 0.3
+            txt.scale.z = 0.3
+            txt.color.a = 1.0
+            txt.color.r = 1.0
+            txt.color.g = 1.0
+            txt.color.b = 1.0
+            txt.text = f"{self.trajectory_weights[idx]:.3f}"
+            
+            weight_labels.markers.append(txt)
+        
+        if len(heavy_indices) < 100:
+            for i in range(len(heavy_indices), 100):
+                m = Marker()
+                m.header.frame_id = 'map'
+                m.header.stamp = self.get_clock().now().to_msg()
+                m.ns = f'heavy_traj_{i}'
+                m.id = i
+                m.action = Marker.DELETE
+                markers.markers.append(m)
+                
+                txt = Marker()
+                txt.header.frame_id = 'map'
+                txt.header.stamp = self.get_clock().now().to_msg()
+                txt.ns = f'weight_label_{i}'
+                txt.id = i
+                txt.action = Marker.DELETE
+                weight_labels.markers.append(txt)
+        
+        self.heavy_weights_pub.publish(markers)
+        self.weight_labels_pub.publish(weight_labels)
 
     def reward_callback(self, arr_msg):
         # QtPlotter calls removed: using RViz MarkerArray topics for visualization
@@ -163,6 +251,8 @@ class Visualizer_Node(Node):
 
     def sampled_callback(self, arr_msg):
         sampled_arr = to_numpy_f32(arr_msg)  # [n_samples, n_steps, state_dim]
+        self.sampled_trajectories = sampled_arr
+        
         n_samples, n_steps, _ = sampled_arr.shape
         markers = MarkerArray()
         for i in range(n_samples):
@@ -180,6 +270,9 @@ class Visualizer_Node(Node):
                 m.points.append(p)
             markers.markers.append(m)
         self.sampled_vis_pub.publish(markers)
+        
+        if self.trajectory_weights is not None:
+            self.visualize_heavy_weight_trajectories()
 
     def drive_callback(self, msg):
         # show current execution speed at car frame
