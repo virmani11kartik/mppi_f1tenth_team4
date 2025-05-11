@@ -12,7 +12,7 @@ friction: 0.8
 init_vel: 2.0
 is_sim: True
 map_dir: ./waypoints/
-map_ind: 3
+map_ind: 1
 n_iterations: 1
 n_samples: 64
 n_steps: 10
@@ -28,7 +28,7 @@ s_frame_max: 62.12059091197948
 sim_time_step: 0.1
 state_predictor: dynamic_ST
 wpt_delim: ;
-wpt_path: map1_edited_waypoints.csv
+wpt_path: levine.csv
 wpt_rowskip: 3
 wpt_thind: 3
 wpt_vind: 5
@@ -39,8 +39,8 @@ wpt_yind: 2
 # ─── Modified: append SVG‑MPPI section  ─────────────────────────────────
 # SVG‑MPPI hyper‑parameters
 svg_Kg:           1     # number of guide particles
-svg_N:           32     # MC samples per guide for surrogate gradient
-svg_L:            3     # SVGD iterations per control cycle
+svg_N:           64     # MC samples per guide for surrogate gradient
+svg_L:            10     # SVGD iterations per control cycle
 svg_eps:       0.15     # SVGD step size ε  (Eq.9)
 svg_sigma_init: 0.05    # initial √variance for guide covariance
 svg_sigma_floor: 1e-4   # minimum variance to avoid collapse
