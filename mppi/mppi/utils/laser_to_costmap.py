@@ -154,8 +154,8 @@ def dilate_obstacles(grid, center_x, center_y, resolution):
     
     # 膨胀范围（格数）
     front_dilate = max(1, int(0.5 / resolution))  # 前方0.5m，约5格(0.1m/格)
-    back_dilate = max(1, int(0.2 / resolution))   # 后方0.2m，约2格
-    side_dilate = max(1, int(0.2 / resolution))   # 左右0.2m，约2格
+    back_dilate = max(1, int(0.13 / resolution))   # 后方0.2m，约2格
+    side_dilate = max(1, int(0.13 / resolution))   # 左右0.2m，约2格
     
     # 对每个障碍点进行膨胀
     for y, x in zip(obstacle_coords[0], obstacle_coords[1]):

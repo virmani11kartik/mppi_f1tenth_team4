@@ -42,6 +42,8 @@ class MPPI():
 
         # initialise Σ_g, Σ_g⁻¹ and a_cov at one place
         self.reset_svg_covariance(sigma_init)
+
+        self.cur_state = None 
         # ------------------------------------------------------------------
 
 
@@ -77,7 +79,7 @@ class MPPI():
             # 1) sample N trajectories per guide
             noise = jax.random.normal(
                 sub, shape=(Kg, N, self.n_steps, self.a_shape)
-            ) * Sigma_diag                           # broadcast diag
+            ) * jnp.sqrt(Sigma_diag)                           # broadcast diag
             V_samples = Vg[:, None] + noise          # [Kg,N,T,m]
 
             # 2) rollout and cost
@@ -101,7 +103,7 @@ class MPPI():
             # 3) surrogate gradient
             score = (V_samples - Vg[:, None]) / Sigma_diag      # [Kg,N,T,m]
             score = score.reshape(-1, self.n_steps, self.a_shape)
-            grad  = jnp.tensordot(w_flat, score, axes=(0, 0))   # [T,m]
+            grad  = -jnp.tensordot(w_flat, score, axes=(0, 0))   # [T,m]
 
             Vg_new = Vg - self.svg_eps * grad[None]             # apply ε step
             return (Vg_new, key, V_samples, w_flat), None
@@ -173,6 +175,7 @@ class MPPI():
             
             
     def update(self, env_state, reference_traj):
+        self.cur_state = env_state
         # (0) shift previous optimal sequence as usual
         self.a_opt, self.a_cov = self.shift_prev_opt(self.a_opt, self.a_cov)
 
@@ -241,7 +244,7 @@ class MPPI():
 
         # ----------  Quadratic term  Δuᵀ Σ⁻¹ Δu  (Eq.8) --------------------------
         # self.Sigma_g_inv : [a_shape]  diagonal inverse variances
-        guide_cost = jnp.sum((da ** 2) * self.Sigma_g_inv, axis=(1, 2))  # [n_samples]
+        guide_cost = 0.5 * jnp.sum((da ** 2) * self.Sigma_g_inv, axis=(1, 2))  # [n_samples]
         R_aug = R + guide_cost[:, None]     # add same cost to every step pos
 
         # ------------ MPPI softmax weight with the augmented return ---------------
