@@ -26,6 +26,9 @@ from ament_index_python.packages import get_package_share_directory
 from pathlib import Path
 jax.config.update("jax_compilation_cache_dir", str(Path.home() / "jax_cache"))
 
+# Import the data recorder
+from mppi.data_recorder import DataRecorder
+
 class MPPI_Node(Node):
     def __init__(self):
         super().__init__('lmppi_node')
@@ -55,6 +58,14 @@ class MPPI_Node(Node):
         reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), self.config.ref_vel, self.config.n_steps)
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
         self.get_logger().info('MPPI initialized')
+        
+        # Initialize data recorder
+        data_dir = Path.home() / "mppi_data"
+        self.data_recorder = DataRecorder(save_dir=data_dir, save_interval=5.0)  # Save every 5 seconds
+        self.get_logger().info(f'Data recording initialized. Saving to {data_dir}')
+        
+        # Timing variables for performance monitoring
+        self.last_callback_time = time.time()
         
         # 打印MPPI对象的所有属性
         self.get_logger().info("MPPI对象的属性:")
@@ -97,6 +108,13 @@ class MPPI_Node(Node):
         self.costmap = None
         self.costmap_origin = None
         self.costmap_resolution = 0.05
+        
+        # Create a timer for periodically checking if data should be saved
+        self.timer = self.create_timer(1.0, self.check_save_data)
+    
+    def check_save_data(self):
+        """Timer callback to check if data should be saved"""
+        self.data_recorder.check_and_save()
 
     def pose_callback(self, pose_msg):
         """
@@ -107,6 +125,15 @@ class MPPI_Node(Node):
         Args: 
             pose_msg (PoseStamped): incoming message from subscribed topic
         """
+        # Track computation time
+        callback_start_time = time.time()
+        computation_time = callback_start_time - self.last_callback_time
+        self.last_callback_time = callback_start_time
+        
+        # Record the computation time
+        timestamp = self.get_clock().now().to_msg().sec + self.get_clock().now().to_msg().nanosec * 1e-9
+        self.data_recorder.record_computation_time(timestamp, computation_time)
+        
         pose = pose_msg.pose.pose
         twist = pose_msg.twist.twist
 
@@ -132,14 +159,26 @@ class MPPI_Node(Node):
             beta,
         ])
         
+        # Record vehicle state data
+        self.data_recorder.record_vehicle_state(timestamp, state_c_0)
+        
         # 使用None作为target_speed，让系统使用waypoints上的速度
         reference_traj, waypoint_ind = self.infer_env.get_refernece_traj(state_c_0.copy(), None, self.config.n_steps)
 
         ## MPPI call
+        mppi_start_time = time.time()
         self.mppi.update(jnp.asarray(state_c_0), jnp.asarray(reference_traj))
+        mppi_computation_time = time.time() - mppi_start_time
         
         # 重新直接计算采样轨迹的权重
         weights = None
+        tracking_cost = 0.0
+        obstacle_cost = 0.0
+        free_count = 0
+        unknown_count = 0
+        obstacle_count = 0
+        outside_count = 0
+        
         try:
             # 获取采样轨迹和参考轨迹
             sample_trajectories = numpify(self.mppi.states)  # [n_samples, n_steps, state_dim]
@@ -204,6 +243,9 @@ class MPPI_Node(Node):
             weights = np.exp(normalized_costs / temperature)  # 取指数
             weights /= np.sum(weights)  # 归一化
             
+            # Record MPPI metrics
+            self.data_recorder.record_mppi_metrics(timestamp, weights)
+            
             # 打印所有权重信息
             self.get_logger().info(f"计算得到的MPPI权重: {weights}")
             # 打印权重的统计信息
@@ -223,12 +265,19 @@ class MPPI_Node(Node):
         self.control[0] = float(mppi_control[0]) * self.config.sim_time_step + self.control[0]
         self.control[1] = float(mppi_control[1]) * self.config.sim_time_step + twist.linear.x
         
+        # Record control data
+        self.data_recorder.record_control(timestamp, self.control[0], self.control[1], twist.linear.x)
+        
         # 提取并打印代价信息
         try:
             # 从最优轨迹获取轨迹点
             traj_opt = numpify(self.mppi.traj_opt)
             # 计算并打印代价
             tracking_cost = np.mean(-np.linalg.norm(reference_traj[1:, :2] - traj_opt[:, :2], ord=1, axis=1))
+            
+            # Calculate cross-track error (distance from optimal trajectory to reference)
+            cross_track_errors = np.linalg.norm(reference_traj[1:, :2] - traj_opt[:, :2], axis=1)
+            mean_cross_track_error = np.mean(cross_track_errors)
             
             # 如果有costmap，计算障碍代价
             if self.infer_env.costmap is not None:
@@ -279,6 +328,9 @@ class MPPI_Node(Node):
                     else:
                         outside_count += 1
                 
+                # Record obstacle data
+                self.data_recorder.record_obstacle_data(timestamp, free_count, unknown_count, obstacle_count, outside_count)
+                
                 # 计算总体代价
                 costs = []
                 for x, y in zip(grid_xs, grid_ys):
@@ -288,6 +340,15 @@ class MPPI_Node(Node):
                         costs.append(10)  # 超出范围的惩罚
                 
                 obstacle_cost = -np.mean(costs) * self.infer_env.obstacle_cost_weight
+                
+                # Record trajectory metrics
+                self.data_recorder.record_trajectory_metrics(
+                    timestamp, 
+                    mean_cross_track_error,
+                    tracking_cost,
+                    obstacle_cost,
+                    tracking_cost + obstacle_cost
+                )
                 
                 # 打印代价信息和点数统计
                 self.get_logger().info(f"轨迹统计: 空闲点={free_count}, 未知点={unknown_count}, 障碍点={obstacle_count}, 超出范围={outside_count}")
@@ -363,15 +424,28 @@ class MPPI_Node(Node):
             
             self.costmap_marker_pub.publish(costmap_marker)
 
+    def shutdown(self):
+        """Clean shutdown with final data save"""
+        self.data_recorder.save_data()  # Save any remaining data
+        self.get_logger().info("MPPI node shutting down, all data saved.")
+        try:
+            self.data_recorder.generate_plots()  # Generate plots on shutdown
+        except Exception as e:
+            self.get_logger().error(f"Error generating plots during shutdown: {e}")
+
 def main(args=None):
     rclpy.init(args=args)
     print("MPPI node initialized")
     mppi_node = MPPI_Node()
-    rclpy.spin(mppi_node)
-
-    mppi_node.destroy_node()
-    rclpy.shutdown()
+    
+    try:
+        rclpy.spin(mppi_node)
+    except KeyboardInterrupt:
+        print("User requested shutdown")
+    finally:
+        mppi_node.shutdown()  # Ensure clean shutdown
+        mppi_node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
-
