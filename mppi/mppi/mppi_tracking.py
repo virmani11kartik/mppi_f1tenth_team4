@@ -31,6 +31,11 @@ class MPPI():
         self.svg_sigma_init = float(config.svg_sigma_init)
         self.Vg = jnp.zeros((self.svg_Kg, self.n_steps, self.a_shape))
 
+        self.svg_Kg  = config.svg_Kg
+        self.svg_N   = config.svg_N
+        self.svg_L   = config.svg_L
+        self.svg_eps = config.svg_eps
+
     def sample_initial_guides(self, rng_key):
         """
         Draw Kg guide particles from N(a_opt, σ_init^2 I).
@@ -47,6 +52,52 @@ class MPPI():
         # store and return
         self.Vg = Vg
         return Vg
+    
+
+    def _one_svgd_step(self, Vg, Sigma_g, env_state, reference_traj, rng_key):
+        """Single SVGD update (surrogate), returns new Vg, new Σ_g."""
+        # draw N samples around each guide
+        Kg, N = self.svg_Kg, self.n_samples
+        Σ_diag = Sigma_g               # [T,m]
+        # sample noise
+        key, sub = jax.random.split(rng_key)
+        noise = jax.random.normal(sub, (Kg, N, self.n_steps, self.a_shape))
+        V_samples = Vg[:,None] + noise * jnp.sqrt(Σ_diag)
+
+        # rollout all samples
+        flat_V = V_samples.reshape(-1, self.n_steps, self.a_shape)
+        flat_states = jax.vmap(self.rollout, in_axes=(0,None,None))(
+                             flat_V, env_state, key)
+
+        # compute *rewards* (higher is better)
+        seq_reward = jax.vmap(self.env.reward_fn_xy,
+                              (0,None,None,None,None,None))(
+            flat_states, reference_traj,
+            self.env.costmap_jax,
+            self.env.costmap_origin[0],
+            self.env.costmap_origin[1],
+            self.env.costmap_resolution
+        )  # [Kg*N, T]
+
+        # do MPPI‐style weighting: higher reward ⇒ higher w
+        seq_R = jnp.mean(seq_reward, axis=1)           # [Kg*N]
+        w_flat = jax.nn.softmax(seq_R / self.temperature)
+
+        # surrogate gradient estimate of reverse‐KL
+        score = (V_samples - Vg[:,None]) / Σ_diag
+        score = score.reshape(-1, self.n_steps, self.a_shape)
+        grad = jnp.tensordot(w_flat, score, axes=(0,0))  # [T,m]
+
+        # drive guides toward high‐reward mode
+        Vg_new = Vg - self.svg_eps * grad[None]
+        # adapt covariance to weighted var of last batch
+        diff2 = (V_samples - Vg_new[:,None])**2
+        Sigma_hat = jnp.maximum(
+            jnp.tensordot(w_flat, diff2.reshape(-1,self.n_steps,self.a_shape),
+                          axes=(0,0)),
+            self.svg_sigma_init**2 * 0.01  # floor
+        )
+        return Vg_new, Sigma_hat, key
 
 
     def init_state(self, env, a_shape):
@@ -74,8 +125,24 @@ class MPPI():
         rng, sub = jax.random.split(self.jrng.new_key())
         Vg = self.sample_initial_guides(sub)       # [Kg, T, m] control sequences
         # …later we’ll transport these; for now we just visualize Vg[0]…
-        guide_u = Vg[0]
-        guide_states = self.rollout(guide_u, env_state, self.jrng.new_key())
+        
+        self.guides_ctrl = [ Vg[0] ]  
+
+        # ─── initialize guide covariance Σ_g for the first SVGD step ───
+        Sigma_g = (self.svg_sigma_init**2) * jnp.ones((self.n_steps, self.a_shape))
+
+        # ───(2) run L SVGD steps, publishing each ────
+        for l in range(1, self.svg_L+1):
+            rng, sub = jax.random.split(rng)
+            Vg, Sigma_g, _ = self._one_svgd_step(
+                Vg, Sigma_g, env_state, reference_traj, sub)
+            self.guides_ctrl.append( Vg[0] )
+
+        # after SVGD, adopt the first guide as MPPI nominal
+        self.a_opt = self.guides_ctrl[-1]
+        self.a_cov = Sigma_g
+        # ------------------------------------------------------
+
 
 
 

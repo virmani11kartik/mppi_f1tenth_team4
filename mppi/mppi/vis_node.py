@@ -46,10 +46,19 @@ class Visualizer_Node(Node):
         self.weight_labels_pub = self.create_publisher(MarkerArray, '/vis/weight_labels', 1)
         self.speed_pub = self.create_publisher(MarkerArray, '/vis/ref_speed', 1)
         # -----------------------------------------------------------------------------------------------------------
-        # subscribe guide states
-        self.create_subscription(Float32MultiArray, 
-                                 "/guide_arr",
-                                 self.guide_callback, 1)
+        # ─── subscribe one topic per SVGD iteration ───
+        L = 5  # must match your MPPI.svg_L
+        self.guide_marker_pub = self.create_publisher(
+            MarkerArray, "/vis/guide", 1)
+
+        for it in range(L+1):  # 0,1,2,3,4,5
+            topic = f"/guide_arr_{it}"
+            self.create_subscription(
+                Float32MultiArray,
+                topic,
+                self._make_guide_callback(it, L),
+                1
+            )
         # -----------------------------------------------------------------------------------------------------------
 
         
@@ -60,11 +69,7 @@ class Visualizer_Node(Node):
         self.reward_sub = self.create_subscription(Float32MultiArray, "/reward_arr", self.reward_callback, 1)
         self.sampled_sub = self.create_subscription(Float32MultiArray, '/sampled_arr', self.sampled_callback, 1)
         self.weights_sub = self.create_subscription(Float32MultiArray, '/traj_weights', self.weights_callback, 1)
-        # ----------------------------------------------------------------------------------------------------------
-        # publisher for guide marker
-        self.guide_marker_pub = self.create_publisher(
-            MarkerArray, "/vis/guide", 1)
-        # ----------------------------------------------------------------------------------------------------------
+        
         
         self.sampled_trajectories = None
         self.trajectory_weights = None
@@ -343,30 +348,42 @@ class Visualizer_Node(Node):
 
 
     # ──────────────────────────────────────────────────────────────
-    def guide_callback(self, arr_msg):
-        data = to_numpy_f32(arr_msg)  # flat array length = T×2
-        T = arr_msg.layout.dim[0].size
-        pts = data.reshape(T,2)
+    def _make_guide_callback(self, it, L):
+        def _cb(arr_msg: Float32MultiArray):
+            data = to_numpy_f32(arr_msg)
+            # arr_msg.layout.dim[0] == #steps, dim[1] == 2 (x,y)
+            T = arr_msg.layout.dim[0].size
+            pts = data.reshape(T, 2)
 
-        m = Marker()
-        m.header.frame_id = "map"
-        m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = "guide"
-        m.id = 0
-        m.type = Marker.LINE_STRIP
-        m.action = Marker.ADD
-        m.scale.x = 0.03  # line width
-        m.color.r = 0.0
-        m.color.g = 1.0
-        m.color.b = 1.0
-        m.color.a = 1.0
+            # build a Marker with unique id=color per iteration
+            m = Marker()
+            m.header.frame_id = 'map'
+            m.header.stamp    = self.get_clock().now().to_msg()
+            m.ns    = f'guide_iter'
+            m.id    = it                 # unique per iteration
+            m.type  = Marker.LINE_STRIP
+            m.action= Marker.ADD
+            m.scale.x = 0.03
+           # a fixed palette for L+1 = 6 guides (you can choose any colors you like)
+            palette = [
+            (1.0, 0.0, 0.0),  # iter 0 = red
+            (1.0, 0.5, 0.0),  # iter 1 = orange
+            (1.0, 1.0, 0.0),  # iter 2 = yellow
+            (0.0, 1.0, 0.0),  # iter 3 = green
+            (0.0, 1.0, 1.0),  # iter 4 = cyan
+            (0.0, 0.0, 1.0),  # iter 5 = blue
+            ]
+            r, g, b = palette[it]
+            m.color.r = r
+            m.color.g = g
+            m.color.b = b
+            m.color.a = 1.0
+            for x,y in pts:
+                p = Point(x=float(x), y=float(y), z=0.0)
+                m.points.append(p)
 
-        for x,y in pts:
-            p = Point(x=float(x), y=float(y), z=0.0)
-            m.points.append(p)
-
-        arr = MarkerArray(markers=[m])
-        self.guide_marker_pub.publish(arr)
+            self.guide_marker_pub.publish(MarkerArray(markers=[m]))
+        return _cb
 
     def waypoints_to_markerArray(self, waypoints, max_num, xind, yind, r=0.0, g=1.0, b=0.0):
         # Publish the reference trajectory
