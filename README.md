@@ -15,7 +15,7 @@ Model Predictive Path Integral (MPPI) control augmented with Stein Variational G
 - Citation
 
 ## Features
-- Real-time MPPI controller written in C++ and Python.
+- Real-time MPPI controller written in Python.
 - SVG-MPPI: biases the sampling distribution with Stein Variational Gradient Descent for superior obstacle avoidance.
 - Multiple vehicle dynamics models (kinematic bicycle, dynamic bicycle, single-track, …).
 - YAML-based configuration and parameter tuning.
@@ -35,7 +35,7 @@ colcon build --packages-select mppi
 source install/setup.bash
 
 # run the default simulation launch file
-ros2 launch mppi example_sim.launch.py
+ros2 run mppi mppi_node.py
 ```
 
 ## Installation
