@@ -10,6 +10,11 @@ https://github.com/virmani11kartik/mppi_f1tenth_team4/commit/c88e4af5b50aebd0fd8
  Car Dynamics Log (May 11, 2025)
 [Car Dynamics Log PDF](plots_experimenral_data/car_dynamics_log_05_11_2025.pdf)
 
+3. MPPI VS SVG-MPPI theoretical analysis and quantitative expreiments
+   Script for understanding the difference between MPPI and SVG-MPPI
+   [Python notebook play we created to understand SVG and MPPI](mppi/util/mathematical_analysis.ipynb)
+
+
 ![alt text](plots_experimenral_data/reade_me_media/IMG_1292.jpg)
 ![alt text](plots_experimenral_data/reade_me_media/IMG_1293.jpeg)
 ![alt text](plots_experimenral_data/reade_me_media/IMG_1294.jpeg)
