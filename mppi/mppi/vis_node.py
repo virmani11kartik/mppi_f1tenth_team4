@@ -46,7 +46,10 @@ class Visualizer_Node(Node):
         self.weight_labels_pub = self.create_publisher(MarkerArray, '/vis/weight_labels', 1)
         self.speed_pub = self.create_publisher(MarkerArray, '/vis/ref_speed', 1)
         # -----------------------------------------------------------------------------------------------------------
-        self.nominal_pub = self.create_publisher(MarkerArray, '/vis/nominal', 1)
+        # subscribe guide states
+        self.create_subscription(Float32MultiArray, 
+                                 "/guide_arr",
+                                 self.guide_callback, 1)
         # -----------------------------------------------------------------------------------------------------------
 
         
@@ -58,7 +61,9 @@ class Visualizer_Node(Node):
         self.sampled_sub = self.create_subscription(Float32MultiArray, '/sampled_arr', self.sampled_callback, 1)
         self.weights_sub = self.create_subscription(Float32MultiArray, '/traj_weights', self.weights_callback, 1)
         # ----------------------------------------------------------------------------------------------------------
-        self.nominal_sub = self.create_subscription(Float32MultiArray, '/nominal_arr',self.nominal_callback, 1)
+        # publisher for guide marker
+        self.guide_marker_pub = self.create_publisher(
+            MarkerArray, "/vis/guide", 1)
         # ----------------------------------------------------------------------------------------------------------
         
         self.sampled_trajectories = None
@@ -338,22 +343,30 @@ class Visualizer_Node(Node):
 
 
     # ──────────────────────────────────────────────────────────────
-    def nominal_callback(self, arr_msg):
-        traj = to_numpy_f32(arr_msg).reshape(-1, 2)   # [T,2]
+    def guide_callback(self, arr_msg):
+        data = to_numpy_f32(arr_msg)  # flat array length = T×2
+        T = arr_msg.layout.dim[0].size
+        pts = data.reshape(T,2)
+
         m = Marker()
-        m.header.frame_id = 'map'
+        m.header.frame_id = "map"
         m.header.stamp = self.get_clock().now().to_msg()
-        m.ns = 'nominal'
-        m.id = 1000
+        m.ns = "guide"
+        m.id = 0
         m.type = Marker.LINE_STRIP
         m.action = Marker.ADD
-        m.scale.x = 0.04            # line width
+        m.scale.x = 0.03  # line width
+        m.color.r = 0.0
+        m.color.g = 1.0
+        m.color.b = 1.0
         m.color.a = 1.0
-        m.color.r = 0.0; m.color.g = 1.0; m.color.b = 1.0  # blue
-        for x, y in traj:
-            p = Point(); p.x = float(x); p.y = float(y); p.z = 0.0
+
+        for x,y in pts:
+            p = Point(x=float(x), y=float(y), z=0.0)
             m.points.append(p)
-        self.nominal_pub.publish(MarkerArray(markers=[m]))
+
+        arr = MarkerArray(markers=[m])
+        self.guide_marker_pub.publish(arr)
 
     def waypoints_to_markerArray(self, waypoints, max_num, xind, yind, r=0.0, g=1.0, b=0.0):
         # Publish the reference trajectory

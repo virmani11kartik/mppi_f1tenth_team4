@@ -26,135 +26,28 @@ class MPPI():
         self.init_state(self.env, self.a_shape)
         self.accum_matrix = jnp.triu(jnp.ones((self.n_steps, self.n_steps)))
         self.track = track
-        # --------------- SVG‑MPPI state & hyper‑parameters -----------------
-        self.svg_Kg  = config.svg_Kg
-        self.svg_N   = config.svg_N
-        self.svg_L   = config.svg_L
-        self.svg_eps = config.svg_eps
-        sigma_init   = config.svg_sigma_init
-        self.sigma_floor = jnp.asarray(float(config.svg_sigma_floor), dtype=jnp.float32)
 
+        self.svg_Kg       = config.svg_Kg     # e.g. 1
+        self.svg_sigma_init = float(config.svg_sigma_init)
         self.Vg = jnp.zeros((self.svg_Kg, self.n_steps, self.a_shape))
 
-        # Guide particle(s)   Vg.shape = [Kg, n_steps, a_shape]
-        self.Vg = jnp.zeros((self.svg_Kg, self.n_steps, self.a_shape))
-        # Shared diagonal covariance  Σ_g  (we store its inverse once)
-
-        # initialise Σ_g, Σ_g⁻¹ and a_cov at one place
-        self.reset_svg_covariance(sigma_init)
-
-        self.cur_state = None 
-        # ------------------------------------------------------------------
-
-
-    # ------------------------------------------------------------------
-    @partial(jax.jit, static_argnums=(0,))
-    def _transport_guides_core(self, Vg, Sigma_g, env_state,
-                            reference_traj, rng_key):
+    def sample_initial_guides(self, rng_key):
         """
-        JIT‑compiled, side‑effect‑free core.
-        Args:
-            Vg         : [Kg, T, m]  current guide set
-            Sigma_g    : [T, m]      diagonal covariance
-        Returns:
-            Vg_new     : [Kg, T, m]  updated guide
-            Sigma_hat  : [T, m]      adaptive diagonal covariance
-            key_out    : PRNG key after use
+        Draw Kg guide particles from N(a_opt, σ_init^2 I).
+        Returns Vg of shape [Kg, n_steps, a_shape].
         """
-        Sigma_diag = Sigma_g                        # [T,m]
-        Kg, N      = self.svg_Kg, self.svg_N
+        # scalar σ
+        sigma = self.svg_sigma_init
+        # draw IID normal noise
+        noise = jax.random.normal(rng_key,
+                 shape=(self.svg_Kg, self.n_steps, self.a_shape))
+        # scale, add to current nominal a_opt
+        Vg = jnp.clip(self.a_opt[None] + sigma * noise,
+                      -1.0, 1.0)
+        # store and return
+        self.Vg = Vg
+        return Vg
 
-        # ---------- dummy tensors so scan has known shapes -----------------
-        dummy_samples = jnp.zeros((Kg, N, self.n_steps, self.a_shape))
-        dummy_w       = jnp.ones((Kg*N,)) / (Kg*N)
-
-        def one_svgd_iter(carry, _):
-            """
-            carry = (Vg, key, V_samples, w_flat)
-            Returns same‑shape carry.
-            """
-            Vg, key, _, _ = carry
-            key, sub = jax.random.split(key)
-
-            # 1) sample N trajectories per guide
-            noise = jax.random.normal(
-                sub, shape=(Kg, N, self.n_steps, self.a_shape)
-            ) * jnp.sqrt(Sigma_diag)                           # broadcast diag
-            V_samples = Vg[:, None] + noise          # [Kg,N,T,m]
-
-            # 2) rollout and cost
-            flat_V  = V_samples.reshape(-1, self.n_steps, self.a_shape)
-            flat_st = jax.vmap(self.rollout, in_axes=(0, None, None))(
-                flat_V, env_state, key)
-
-            costs = jax.vmap(
-                self.env.reward_fn_xy,
-                (0, None, None, None, None, None)
-            )(flat_st, reference_traj,
-            self.env.costmap_jax,
-            self.env.costmap_origin[0],
-            self.env.costmap_origin[1],
-            self.env.costmap_resolution)
-
-            seq_cost = jnp.mean(costs, axis=1)                 # [Kg*N]
-            w_flat   = jax.nn.softmax(
-                -(seq_cost - jnp.min(seq_cost)) / self.temperature)
-
-            # 3) surrogate gradient
-            score = (V_samples - Vg[:, None]) / Sigma_diag      # [Kg,N,T,m]
-            score = score.reshape(-1, self.n_steps, self.a_shape)
-            grad  = -jnp.tensordot(w_flat, score, axes=(0, 0))   # [T,m]
-
-            Vg_new = Vg - self.svg_eps * grad[None]             # apply ε step
-            return (Vg_new, key, V_samples, w_flat), None
-
-        # ---------- run L SVGD iterations via lax.scan ----------------------
-        (Vg_new, key_out, V_samples_last, w_last), _ = jax.lax.scan(
-            one_svgd_iter,
-            (Vg, rng_key, dummy_samples, dummy_w),
-            None,
-            length=self.svg_L)
-
-        # ---------- adaptive covariance  Σ̂  from last batch ----------------
-        diff2 = (V_samples_last - Vg_new[0]) ** 2                # [Kg,N,T,m]
-        Sigma_hat = jnp.maximum(
-            jnp.tensordot(w_last, diff2.reshape(-1, self.n_steps, self.a_shape),
-                        axes=(0, 0)),                          # weighted var
-            self.sigma_floor                                     # floor
-        )                                                        # [T,m]
-        return Vg_new, Sigma_hat, key_out
-    
-
-    def transport_guides(self, env_state, reference_traj, rng_key):
-        """
-        Stateful wrapper: calls the pure JIT core, then stores the results
-        back into self.Vg, self.Sigma_g, self.Sigma_g_inv.
-        """
-        Vg_new, Sigma_hat, _ = self._transport_guides_core(
-            self.Vg, self.Sigma_g, env_state, reference_traj, rng_key)
-
-        # bring concrete device arrays to Python side
-        Vg_new    = jax.device_get(Vg_new)
-        Sigma_hat = jax.device_get(Sigma_hat)
-
-        # update class state
-        self.Vg          = Vg_new
-        self.Sigma_g     = Sigma_hat
-        self.Sigma_g_inv = 1.0 / Sigma_hat
-
-        # first guide becomes nominal sequence for MPPI
-        return Vg_new[0], Sigma_hat
-# -------------------------------------------------------------------
-
-
-    # ─── Modified helper (replaces previous 1‑D version) ────────────────────
-    def reset_svg_covariance(self, sigma_init=0.05):
-        # diagonal variance per time‑step
-        diag = (sigma_init ** 2) * jnp.ones((self.n_steps, self.a_shape))
-        self.Sigma_g     = diag
-        self.Sigma_g_inv = 1.0 / diag
-        self.a_cov       = diag            # keep MPPI sampler consistent
-    # -----------------------------------------------------------------------
 
     def init_state(self, env, a_shape):
         # uses random as a hack to support vmap
@@ -175,20 +68,17 @@ class MPPI():
             
             
     def update(self, env_state, reference_traj):
-        self.cur_state = env_state
-        # (0) shift previous optimal sequence as usual
         self.a_opt, self.a_cov = self.shift_prev_opt(self.a_opt, self.a_cov)
 
-        # -----------------------------------------------------------------
+        # ─────── Step 1: Draw initial guide(s) ───────
+        rng, sub = jax.random.split(self.jrng.new_key())
+        Vg = self.sample_initial_guides(sub)       # [Kg, T, m] control sequences
+        # …later we’ll transport these; for now we just visualize Vg[0]…
+        guide_u = Vg[0]
+        guide_states = self.rollout(guide_u, env_state, self.jrng.new_key())
 
-        # (1) SVG‑MPPI: move guide & adopt it as new nominal sequence Ū
-        (U_nom, Sigma_hat) = self.transport_guides(env_state, reference_traj, self.jrng.new_key())
-        self.a_opt = U_nom                      # start MPPI from the guide
-        # you may also copy Σ_g into self.a_cov if adaptive_covariance = False
-        self.a_cov = Sigma_hat 
-        # -----------------------------------------------------------------
 
-        # (2) vanilla MPPI refinement iterations
+
         for _ in range(self.n_iterations):
             self.a_opt, self.a_cov, self.states, self.traj_opt = self.iteration_step(self.a_opt, self.a_cov, self.jrng.new_key(), env_state, reference_traj)
         
@@ -241,20 +131,7 @@ class MPPI():
             ) # [n_samples, n_steps]          
         
         R = jax.vmap(self.returns)(reward) # [n_samples, n_steps], pylint: disable=invalid-name
-
-        # ----------  Quadratic term  Δuᵀ Σ⁻¹ Δu  (Eq.8) --------------------------
-        # self.Sigma_g_inv : [a_shape]  diagonal inverse variances
-        guide_cost = 0.5 * jnp.sum((da ** 2) * self.Sigma_g_inv, axis=(1, 2))  # [n_samples]
-        R_aug = R + guide_cost[:, None]     # add same cost to every step pos
-
-        # ------------ MPPI softmax weight with the augmented return ---------------
-        w = jax.vmap(self.weights, 1, 1)(R_aug)       # [n_samples, n_steps]
-        # --------------------------------------------------------------------------
-
-
-        # Original MPPI weight
-        # w = jax.vmap(self.weights, 1, 1)(R)  # [n_samples, n_steps]
-        
+        w = jax.vmap(self.weights, 1, 1)(R)  # [n_samples, n_steps]
         da_opt = jax.vmap(jnp.average, (1, None, 1))(da, 0, w)  # [n_steps, dim_a]
         a_opt = jnp.clip(a_opt + da_opt, -1.0, 1.0)  # [n_steps, dim_a]
         if self.adaptive_covariance:

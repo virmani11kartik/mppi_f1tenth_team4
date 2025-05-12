@@ -40,7 +40,7 @@ wpt_yind: 2
 # SVG‑MPPI hyper‑parameters
 svg_Kg:           1     # number of guide particles
 svg_N:           64     # MC samples per guide for surrogate gradient
-svg_L:            10     # SVGD iterations per control cycle
+svg_L:            5     # SVGD iterations per control cycle
 svg_eps:       0.15     # SVGD step size ε  (Eq.9)
 svg_sigma_init: 0.05    # initial √variance for guide covariance
 svg_sigma_floor: 1e-4   # minimum variance to avoid collapse

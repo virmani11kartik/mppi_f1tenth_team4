@@ -93,7 +93,7 @@ class MPPI_Node(Node):
         # subscriber for laser scan
         self.scan_sub = self.create_subscription(LaserScan, "/scan", self.scan_callback, qos)
 
-        self.nominal_pub = self.create_publisher(Float32MultiArray, '/nominal_arr', 1)
+        self.guide_pub = self.create_publisher(Float32MultiArray, "/guide_arr", qos)
 
         # 存储最新的栅格地图
         self.costmap = None
@@ -315,19 +315,16 @@ class MPPI_Node(Node):
 
 
         # ── NEW: publish nominal guide trajectory (blue) ─────────────
-        if hasattr(self.mppi, "Vg") and self.mppi.Vg.shape[0] > 0:
-            # current robot state (already stored earlier in update loop)
-            cur_state = self.mppi.cur_state                       # shape [state_dim]
-
-            # run dynamics to get the state trajectory of the guide controls
-            nominal_states = numpify(
-                    self.mppi.rollout(self.mppi.Vg[0],
-                                    cur_state,
-                                    self.mppi.jrng.new_key()))   # [T,state_dim]
-
-            nominal_xy = nominal_states[:, :2]                    # take (x,y)
-            nom_msg = to_multiarray_f32(nominal_xy.astype(np.float32))
-            self.nominal_pub.publish(nom_msg)
+        guide_states = numpify(self.mppi.rollout(
+                          self.mppi.Vg[0], jnp.asarray(state_c_0),
+                          self.mppi.jrng.new_key()))
+        # guide_states: [T, state_dim], we only care x,y so slice [:, :2]
+        msg = Float32MultiArray()
+        # tell ROS it’s a 2D array T×2
+        msg.layout.dim.append(MultiArrayDimension(label="step", size=guide_states.shape[0], stride=2))
+        msg.layout.dim.append(MultiArrayDimension(label="xy",   size=2,                stride=1))
+        msg.data = guide_states[:, :2].flatten().tolist()
+        self.guide_pub.publish(msg)
 
         if twist.linear.x < self.config.init_vel:
             self.control = [0.0, self.config.init_vel * 2]
