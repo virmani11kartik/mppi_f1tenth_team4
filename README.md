@@ -48,17 +48,11 @@ ros2 launch mppi example_sim.launch.py
 3. Clone this repository into the `src` folder of your workspace and build with `colcon` as shown in the Quick Start.
 4. Source the workspace every new terminal session: `source ~/f1_ws/install/setup.bash`.
 
-## Simulation Usage
-*The repository is agnostic to the specific simulator. The default launch file expects a standard F1TENTH Gazebo world.*
 
-```bash
-# example: run controller with a pre-recorded bag of laser scans
-ros2 launch mppi mppi_sim_demo.launch.py map:=skirk map_path:=~/maps/skirk.yaml
-```
-Adjust parameters in `mppi/config/config.yaml` to change horizon length, number of particles, cost weights, etc.
 
-## Real-Car Usage
-Launch your regular F1TENTH bring-up (LiDAR, IMU, odometry, etc.) first. In two new terminals run:
+
+## Usage (Simulation/real car)
+Launch your regular F1TENTH bring-up (LiDAR, particle_filter, etc.) first. In two new terminals run:
 ```bash
 # main controller
 ros2 run mppi mppi_node.py
@@ -66,6 +60,7 @@ ros2 run mppi mppi_node.py
 # visualization (optional)
 ros2 run mppi vis_node.py
 ```
+Adjust parameters in `mppi/config/config.yaml` to change horizon length, number of particles, cost weights, etc.
 
 ## Repository Layout
 ```text
@@ -73,7 +68,7 @@ mppi_f1tenth_team4/
 ├── mppi/                  # ROS 2 package
 │   ├── config/            # YAML configuration files
 │   ├── mppi/              # Core Python implementation
-│   ├── scripts/           # Executable helper scripts & launch files
+│   ├── scripts/           # Executable ROS2 mppi_node
 │   └── waypoints/         # Example waypoint files
 ├── plots_experimenral_data/  # Reports, logs, and media (typo kept for backward-compat.)
 └── README.md
