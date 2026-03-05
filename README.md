@@ -1,5 +1,7 @@
 Plotting scripsts :
 
+### Race Run
+![race](demo.gif)
 
 1. **Final Project Report** ✨
    > [SVG-MPPI Final Report (May 2025)](plots_experimenral_data/SVG_MPPI_Final_Report.pdf)
